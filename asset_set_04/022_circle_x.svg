@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="50" fill="{{C}}"/>
+  <rect x="-10" y="42" width="120" height="16" fill="{{C}}" transform="rotate(45 50 50)"/>
+  <rect x="-10" y="42" width="120" height="16" fill="{{C}}" transform="rotate(-45 50 50)"/>
+</svg>

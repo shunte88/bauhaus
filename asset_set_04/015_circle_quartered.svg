@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M 50,0 L 50,50 A 50,50 0 0 0 0,50 L 0,0 Z" fill="{{C}}"/>
+  <path d="M 50,0 L 50,50 A 50,50 0 0 1 100,50 L 100,0 Z" fill="{{C}}"/>
+  <path d="M 50,100 L 50,50 A 50,50 0 0 1 0,50 L 0,100 Z" fill="{{C}}"/>
+  <path d="M 50,100 L 50,50 A 50,50 0 0 0 100,50 L 100,100 Z" fill="{{C}}"/>
+  <circle cx="50" cy="50" r="50" fill="none" stroke="none"/>
+  <path d="M 50,0 A 50,50 0 0 1 100,50 A 50,50 0 0 1 50,100 A 50,50 0 0 1 0,50 A 50,50 0 0 1 50,0 Z" fill="none"/>
+</svg>

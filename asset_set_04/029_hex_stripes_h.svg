@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <clipPath id="h29"><polygon points="50,0 100,25 100,75 50,100 0,75 0,25"/></clipPath>
+  </defs>
+  <g clip-path="url(#h29)" fill="{{C}}">
+    <rect x="0" y="0" width="100" height="14"/>
+    <rect x="0" y="28" width="100" height="14"/>
+    <rect x="0" y="56" width="100" height="14"/>
+    <rect x="0" y="84" width="100" height="14"/>
+  </g>
+</svg>
