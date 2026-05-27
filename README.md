@@ -18,7 +18,7 @@ bauhaus --theme  <path.svg> [--config <path.yaml>] [--assets <dir>] [--output <p
 bauhaus --list-palettes
 ```
 
-`--config` or `--theme` is required (or `--list-palettes`). When both are passed, config overrides theme settings (except grid dimensions — those always come from the theme).
+`--config` or `--theme` is required (or `--list-palettes`). When both are passed, config overrides theme settings (except grid dimensions, those always come from the theme).
 
 Output defaults to `bauhaus_YYYYMMDD_HHMMSS.svg`.
 
@@ -64,7 +64,7 @@ For non-`grid` methods, colour selection inside each cell is biased: ~65% the do
 | `--theme T` | from theme | from theme | from theme |
 | `--theme T --config X` | **theme** (config grid keys ignored, with stderr note) | config overrides if present | each key overrides if present |
 
-A theme reseed with `limit=N` picks a *fresh* random N-subset of glyphs — the count is preserved, not the specific glyphs.
+A theme reseed with `limit=N` picks a *fresh* random N-subset of glyphs, the count is preserved, but not the specific glyphs [TBD add consistent keyword].
 
 ## Built-in palettes
 
@@ -84,12 +84,12 @@ You can also specify your own palette with up to 10 supported colours.
 
 ## Assets
 
-Shapes are SVG files in the `--assets` directory (default `assets/`). Each file uses a `viewBox="0 0 100 100"` base coordinate space and marks paintable fills with the literal placeholder `{{C}}` — every occurrence is independently replaced with a chosen palette colour at generation time. Drop a new SVG in the folder and it's picked up on the next run.
+Shapes are SVG files in the `--assets` directory (default `assets/`). Each file uses a `viewBox="0 0 100 100"` base coordinate space and marks paintable fills with the literal placeholder `{{C}}` : every occurrence is independently replaced with a chosen palette colour at generation time. Drop a new SVG in the folder and it's picked up on the next run.
 
 Bundled sets:
 
-- `assets/` — the default 31 primitives (squares, circles, triangles, diamonds, arches, half/quarter circles, hourglass, triangle-grid, lines, cross, pill, ring, spiral, diagonal stripes, dot rows, splits, quadrants, dots, semis, etc.).
-- `asset_set_01/` — 42 folk-style ornaments (quatrefoils, snowflakes, stars, flowers, scrollwork, hearts, sunbursts).
-- `asset_set_02/` — 18 large composite tiles (tulips, lotus, bullseye, half-disks, leaf stems, dot rows, etc.).
+- `assets/` : the default 31 primitives (squares, circles, triangles, diamonds, arches, half/quarter circles, hourglass, triangle-grid, lines, cross, pill, ring, spiral, diagonal stripes, dot rows, splits, quadrants, dots, semis, etc.).
+- `asset_set_01/` : 42 folk-style ornaments (quatrefoils, snowflakes, stars, flowers, scrollwork, hearts, sunbursts).
+- `asset_set_02/` : 18 large composite tiles (tulips, lotus, bullseye, half-disks, leaf stems, dot rows, etc.).
 
-Shapes and palettes are derived from exemplar patterns provided by Barrett/Peter for their e-Ink project, plus the `bauhaus.graphics` reference and hand-drawn additions.
+Shapes and palettes are derived from exemplar patterns provided by Barrett/Peter for their e-Ink project, multiple reference sourced from pinterest, as well as hand-drawn additions.
