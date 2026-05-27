@@ -1,7 +1,7 @@
 # A named built-in palette (see `bauhaus --list-palettes`).
 # Background is auto-picked from the palette's background pool.
 #palette: "Moholy-Nagy"
-palette: "barrette02"
+palette: "barrett02"
 
 # To use a custom palette instead, replace the line above with an inline array:
 # palette:
@@ -20,8 +20,8 @@ supersize: true
 
 # Placement algorithm: grid (default), wave, spiral, inflection, deflection.
 # Non-grid methods compute a phase from each cell's position that biases its
-# colour and rotation, producing structured patterns instead of pure chaos.
-method: grid
+# color and rotation, producing structured patterns instead of pure chaos.
+method: spiral
 
 columns: 12
 rows: 8

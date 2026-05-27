@@ -91,14 +91,14 @@ pub const PALETTES: &[BuiltinPalette] = &[
         backgrounds: &["#42d4f4", "#f032e6"],
     },
     BuiltinPalette {
-        name: "Compskey01",
-        aliases: &["barrette01"],
+        name: "Comiskey01",
+        aliases: &["barrett01"],
         colors: &["#efefee", "#f7bd18", "#ee6c15", "#1f3a61", "#1a2b43", "#3ca1a1", "#fefefe"],
         backgrounds: &["#efefee", "#000000", "#fefefe"],
     },
     BuiltinPalette {
-        name: "Compskey02",
-        aliases: &["barrette02"],
+        name: "Comiskey02",
+        aliases: &["barrett02"],
         colors: &["#fefefe", "#40aaaa", "#181c17", "#214345", "#ee6c15", "#f1bb13", "#d8c8aa"],
         backgrounds: &["#d8c8aa", "#000000", "#fefefe"],
     },
