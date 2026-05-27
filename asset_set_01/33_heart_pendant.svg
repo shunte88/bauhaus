@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M 50,90 L 18,40 C 18,20 38,15 50,30 C 62,15 82,20 82,40 Z" fill="{{C}}"/>
+  <polygon points="50,55 56,75 50,90 44,75" fill="{{C}}"/>
+</svg>

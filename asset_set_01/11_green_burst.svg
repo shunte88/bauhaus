@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <ellipse cx="50" cy="14" rx="4" ry="14" fill="{{C}}"/>
+  <ellipse cx="50" cy="86" rx="4" ry="14" fill="{{C}}"/>
+  <ellipse cx="14" cy="50" rx="14" ry="4" fill="{{C}}"/>
+  <ellipse cx="86" cy="50" rx="14" ry="4" fill="{{C}}"/>
+  <ellipse cx="26" cy="26" rx="4" ry="14" fill="{{C}}" transform="rotate(-45 26 26)"/>
+  <ellipse cx="74" cy="26" rx="4" ry="14" fill="{{C}}" transform="rotate(45 74 26)"/>
+  <ellipse cx="26" cy="74" rx="4" ry="14" fill="{{C}}" transform="rotate(45 26 74)"/>
+  <ellipse cx="74" cy="74" rx="4" ry="14" fill="{{C}}" transform="rotate(-45 74 74)"/>
+  <circle cx="50" cy="50" r="10" fill="{{C}}"/>
+</svg>

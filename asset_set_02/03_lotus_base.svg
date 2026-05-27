@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M 50,20 C 35,30 25,50 30,70 L 70,70 C 75,50 65,30 50,20 Z" fill="{{C}}"/>
+  <ellipse cx="35" cy="45" rx="8" ry="20" fill="{{C}}" transform="rotate(-20 35 45)"/>
+  <ellipse cx="65" cy="45" rx="8" ry="20" fill="{{C}}" transform="rotate(20 65 45)"/>
+  <rect x="20" y="70" width="60" height="14" fill="{{C}}"/>
+</svg>

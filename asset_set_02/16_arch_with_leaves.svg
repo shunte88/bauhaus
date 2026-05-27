@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M 15,90 L 15,55 A 35,35 0 0 1 85,55 L 85,90 Z" fill="{{C}}"/>
+  <ellipse cx="38" cy="20" rx="8" ry="18" fill="{{C}}" transform="rotate(-30 38 20)"/>
+  <ellipse cx="62" cy="20" rx="8" ry="18" fill="{{C}}" transform="rotate(30 62 20)"/>
+</svg>

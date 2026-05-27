@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M 50,10 C 25,40 25,70 50,90 C 75,70 75,40 50,10 Z" fill="{{C}}"/>
+  <circle cx="50" cy="60" r="14" fill="{{C}}"/>
+  <circle cx="50" cy="60" r="6" fill="{{C}}"/>
+</svg>

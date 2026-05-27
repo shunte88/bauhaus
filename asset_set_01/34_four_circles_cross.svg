@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="32" cy="32" r="20" fill="{{C}}"/>
+  <circle cx="68" cy="32" r="20" fill="{{C}}"/>
+  <circle cx="32" cy="68" r="20" fill="{{C}}"/>
+  <circle cx="68" cy="68" r="20" fill="{{C}}"/>
+  <circle cx="32" cy="32" r="10" fill="{{C}}"/>
+  <circle cx="68" cy="32" r="10" fill="{{C}}"/>
+  <circle cx="32" cy="68" r="10" fill="{{C}}"/>
+  <circle cx="68" cy="68" r="10" fill="{{C}}"/>
+</svg>

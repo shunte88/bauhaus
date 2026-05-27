@@ -14,7 +14,8 @@ const COLOR_TOKEN: &str = "{{C}}";
 const COMPONENT_UNIT: u32 = 100;
 const ROTATIONS: [u32; 4] = [0, 90, 180, 270];
 const SUPERSIZE_SCALES: [u32; 3] = [3, 4, 6];
-const SUPERSIZE_COUNT_RANGE: std::ops::RangeInclusive<u32> = 2..=5;
+const SUPERSIZE_COUNT_RANGE: std::ops::RangeInclusive<u32> = 10..=24;
+const LINES_COUNT_RANGE: std::ops::RangeInclusive<u32> = 4..=12;
 const META_OPEN: &str = "<desc>bauhaus";
 const META_CLOSE: &str = "</desc>";
 
@@ -124,6 +125,10 @@ struct Config {
     #[serde(default)]
     supersize: Option<bool>,
     #[serde(default)]
+    lines: Option<bool>,
+    #[serde(default)]
+    limit: Option<u32>,
+    #[serde(default)]
     method: Option<Method>,
     #[serde(default)]
     columns: Option<u32>,
@@ -138,6 +143,8 @@ struct Resolved {
     colors: Vec<String>,
     background: Option<String>,
     supersize: bool,
+    lines: bool,
+    limit: Option<u32>,
     method: Method,
     columns: u32,
     rows: u32,
@@ -159,8 +166,8 @@ fn validate_dims(columns: u32, rows: u32, size: u32) -> Result<()> {
     if !(4..=20).contains(&rows) {
         bail!("rows must be between 4 and 20 (got {rows})");
     }
-    if !(20..=50).contains(&size) {
-        bail!("size must be between 20 and 50 (got {size})");
+    if !(30..=60).contains(&size) {
+        bail!("size must be between 30 and 60 (got {size})");
     }
     Ok(())
 }
@@ -215,10 +222,18 @@ fn resolve_standalone(cfg: Config) -> Result<Resolved> {
     }
     validate_dims(columns, rows, size)?;
 
+    if let Some(lim) = cfg.limit {
+        if lim < 1 {
+            bail!("limit must be >= 1 (got {lim})");
+        }
+    }
+
     Ok(Resolved {
         colors,
         background: cfg.background.or(palette_bg),
         supersize: cfg.supersize.unwrap_or(false),
+        lines: cfg.lines.unwrap_or(false),
+        limit: cfg.limit,
         method: cfg.method.unwrap_or_default(),
         columns,
         rows,
@@ -242,6 +257,15 @@ fn apply_overrides(mut base: Resolved, cfg: Config) -> Result<Resolved> {
     }
     if let Some(ss) = cfg.supersize {
         base.supersize = ss;
+    }
+    if let Some(ln) = cfg.lines {
+        base.lines = ln;
+    }
+    if let Some(lim) = cfg.limit {
+        if lim < 1 {
+            bail!("limit must be >= 1 (got {lim})");
+        }
+        base.limit = Some(lim);
     }
     if let Some(m) = cfg.method {
         base.method = m;
@@ -271,6 +295,8 @@ fn read_theme(path: &Path) -> Result<Resolved> {
     let mut rows: Option<u32> = None;
     let mut size: Option<u32> = None;
     let mut supersize = false;
+    let mut lines = false;
+    let mut limit: Option<u32> = None;
     let mut method = Method::default();
     let mut colors: Vec<String> = Vec::new();
     let mut background: Option<String> = None;
@@ -285,6 +311,14 @@ fn read_theme(path: &Path) -> Result<Resolved> {
             "rows" => rows = Some(v.parse().context("metadata: rows")?),
             "size" => size = Some(v.parse().context("metadata: size")?),
             "supersize" => supersize = v == "true",
+            "lines" => lines = v == "true",
+            "limit" => {
+                limit = if v.is_empty() || v == "none" {
+                    None
+                } else {
+                    Some(v.parse().context("metadata: limit")?)
+                };
+            }
             "method" => method = Method::parse(v).context("metadata: method")?,
             "palette" => {
                 colors = v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
@@ -314,6 +348,8 @@ fn read_theme(path: &Path) -> Result<Resolved> {
         colors,
         background,
         supersize,
+        lines,
+        limit,
         method,
         columns,
         rows,
@@ -460,12 +496,18 @@ fn metadata_block(r: &Resolved) -> String {
         .as_deref()
         .map(normalize_color)
         .unwrap_or_else(|| "none".to_string());
+    let limit_str = r
+        .limit
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "none".to_string());
     format!(
-        "  <desc>bauhaus\ncolumns={cols}\nrows={rows}\nsize={size}\nsupersize={ss}\nmethod={method}\npalette={pal}\nbackground={bg}\n</desc>\n",
+        "  <desc>bauhaus\ncolumns={cols}\nrows={rows}\nsize={size}\nsupersize={ss}\nlines={lines}\nlimit={limit}\nmethod={method}\npalette={pal}\nbackground={bg}\n</desc>\n",
         cols = r.columns,
         rows = r.rows,
         size = r.size,
         ss = r.supersize,
+        lines = r.lines,
+        limit = limit_str,
         method = r.method.as_str(),
         pal = normalized.join(","),
         bg = bg,
@@ -535,6 +577,47 @@ fn generate_svg(r: &Resolved, components: &[String]) -> String {
         }
     }
 
+    if r.lines {
+        let count = rng.gen_range(LINES_COUNT_RANGE);
+        let canvas_w = total_w as f64;
+        let canvas_h = total_h as f64;
+        let diagonal = (canvas_w * canvas_w + canvas_h * canvas_h).sqrt();
+        let min_len = r.size as f64;
+        let min_weight = 2.0;
+        let max_weight = (r.size as f64 / 2.0).max(min_weight + 1.0);
+        let sqrt2 = std::f64::consts::SQRT_2;
+        for _ in 0..count {
+            let orient = rng.gen_range(0..4);
+            let max_len = match orient {
+                0 => canvas_w,
+                1 => canvas_h,
+                _ => diagonal,
+            };
+            let len = rng.gen_range(min_len..=max_len);
+            let weight = rng.gen_range(min_weight..=max_weight);
+            let cx = rng.gen_range(0.0..canvas_w);
+            let cy = rng.gen_range(0.0..canvas_h);
+            let half = len / 2.0;
+            let (x1, y1, x2, y2) = match orient {
+                0 => (cx - half, cy, cx + half, cy),
+                1 => (cx, cy - half, cx, cy + half),
+                2 => {
+                    let d = half / sqrt2;
+                    (cx - d, cy - d, cx + d, cy + d)
+                }
+                _ => {
+                    let d = half / sqrt2;
+                    (cx - d, cy + d, cx + d, cy - d)
+                }
+            };
+            let color = r.colors.choose(&mut rng).expect("palette non-empty");
+            body.push_str(&format!(
+                "  <line x1=\"{x1:.1}\" y1=\"{y1:.1}\" x2=\"{x2:.1}\" y2=\"{y2:.1}\" stroke=\"{}\" stroke-width=\"{weight:.1}\" stroke-linecap=\"round\"/>\n",
+                normalize_color(color),
+            ));
+        }
+    }
+
     format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {total_w} {total_h}\" width=\"{total_w}\" height=\"{total_h}\" style=\"overflow:hidden\">\n{body}</svg>\n"
     )
@@ -585,11 +668,23 @@ fn main() -> Result<()> {
         (None, None) => bail!("must provide --config or --theme (or --list-palettes)"),
     };
 
-    let components = load_components(&args.assets)?;
+    let mut components = load_components(&args.assets)?;
+    let loaded = components.len();
+    if let Some(lim) = resolved.limit {
+        let n = (lim as usize).min(components.len());
+        let mut rng = rand::thread_rng();
+        components.shuffle(&mut rng);
+        components.truncate(n);
+    }
     eprintln!(
-        "loaded {} components from {}",
+        "loaded {} components from {}{}",
         components.len(),
-        args.assets.display()
+        args.assets.display(),
+        if resolved.limit.is_some() && components.len() < loaded {
+            format!(" (limited from {loaded})")
+        } else {
+            String::new()
+        }
     );
 
     let svg = generate_svg(&resolved, &components);

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <ellipse cx="50" cy="22" rx="14" ry="20" fill="{{C}}"/>
+  <ellipse cx="50" cy="78" rx="14" ry="20" fill="{{C}}"/>
+  <ellipse cx="22" cy="50" rx="20" ry="14" fill="{{C}}"/>
+  <ellipse cx="78" cy="50" rx="20" ry="14" fill="{{C}}"/>
+  <circle cx="50" cy="50" r="8" fill="{{C}}"/>
+</svg>

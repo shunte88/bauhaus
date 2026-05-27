@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect x="46" y="14" width="8" height="72" fill="{{C}}" transform="rotate(45 50 50)"/>
+  <rect x="46" y="14" width="8" height="72" fill="{{C}}" transform="rotate(-45 50 50)"/>
+  <circle cx="18" cy="18" r="9" fill="{{C}}"/>
+  <circle cx="82" cy="18" r="9" fill="{{C}}"/>
+  <circle cx="18" cy="82" r="9" fill="{{C}}"/>
+  <circle cx="82" cy="82" r="9" fill="{{C}}"/>
+  <circle cx="50" cy="50" r="6" fill="{{C}}"/>
+</svg>

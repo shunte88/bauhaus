@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <g fill="{{C}}">
+    <polygon points="50,50 35,8 50,20 65,8"/>
+    <polygon points="50,50 35,8 50,20 65,8" transform="rotate(90 50 50)"/>
+    <polygon points="50,50 35,8 50,20 65,8" transform="rotate(180 50 50)"/>
+    <polygon points="50,50 35,8 50,20 65,8" transform="rotate(270 50 50)"/>
+  </g>
+  <circle cx="50" cy="50" r="8" fill="{{C}}"/>
+</svg>

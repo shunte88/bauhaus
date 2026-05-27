@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <polygon points="50,12 80,50 50,88 20,50" fill="{{C}}"/>
+  <g fill="none" stroke="{{C}}" stroke-width="4" stroke-linecap="round">
+    <path d="M 50,30 Q 60,40 50,50 Q 40,60 50,70"/>
+    <path d="M 35,42 Q 45,50 35,58"/>
+    <path d="M 65,42 Q 55,50 65,58"/>
+  </g>
+  <circle cx="50" cy="50" r="5" fill="{{C}}"/>
+</svg>
