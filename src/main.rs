@@ -15,12 +15,56 @@ const COMPONENT_UNIT: u32 = 100;
 const ROTATIONS: [u32; 4] = [0, 90, 180, 270];
 const SUPERSIZE_SCALES: [u32; 3] = [3, 4, 6];
 const SUPERSIZE_COUNT_RANGE: std::ops::RangeInclusive<u32> = 2..=5;
+const META_OPEN: &str = "<desc>bauhaus";
+const META_CLOSE: &str = "</desc>";
+
+#[derive(Deserialize, Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum Method {
+    #[default]
+    Grid,
+    Wave,
+    Spiral,
+    Inflection,
+    Deflection,
+}
+
+impl Method {
+    fn as_str(self) -> &'static str {
+        match self {
+            Method::Grid => "grid",
+            Method::Wave => "wave",
+            Method::Spiral => "spiral",
+            Method::Inflection => "inflection",
+            Method::Deflection => "deflection",
+        }
+    }
+
+    fn parse(s: &str) -> Result<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "grid" => Ok(Method::Grid),
+            "wave" => Ok(Method::Wave),
+            "spiral" => Ok(Method::Spiral),
+            "inflection" => Ok(Method::Inflection),
+            "deflection" => Ok(Method::Deflection),
+            other => bail!(
+                "unknown method {other:?}; expected one of: grid, wave, spiral, inflection, deflection"
+            ),
+        }
+    }
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "bauhaus", about = "Generate Bauhaus-style SVG patterns")]
 struct Args {
-    #[arg(short, long, required_unless_present = "list_palettes")]
+    /// YAML config. Required unless --theme or --list-palettes is given.
+    #[arg(short, long, required_unless_present_any = ["theme", "list_palettes"])]
     config: Option<PathBuf>,
+
+    /// A previously-generated SVG to seed grid/palette/supersize from. Config (if any)
+    /// can override palette/background/supersize; grid dimensions always come from theme.
+    #[arg(short, long)]
+    theme: Option<PathBuf>,
 
     #[arg(short, long, default_value = "assets")]
     assets: PathBuf,
@@ -69,22 +113,32 @@ impl<'de> Deserialize<'de> for PaletteSpec {
     }
 }
 
-#[derive(Deserialize, Debug)]
+/// All-optional config. In standalone mode we re-validate that the required
+/// fields are present; in theme mode the present fields are treated as overrides.
+#[derive(Deserialize, Debug, Default)]
 struct Config {
-    palette: PaletteSpec,
+    #[serde(default)]
+    palette: Option<PaletteSpec>,
     #[serde(default)]
     background: Option<String>,
     #[serde(default)]
-    supersize: bool,
-    columns: u32,
-    rows: u32,
-    size: u32,
+    supersize: Option<bool>,
+    #[serde(default)]
+    method: Option<Method>,
+    #[serde(default)]
+    columns: Option<u32>,
+    #[serde(default)]
+    rows: Option<u32>,
+    #[serde(default)]
+    size: Option<u32>,
 }
 
+#[derive(Debug, Clone)]
 struct Resolved {
     colors: Vec<String>,
     background: Option<String>,
     supersize: bool,
+    method: Method,
     columns: u32,
     rows: u32,
     size: u32,
@@ -98,53 +152,172 @@ fn validate_hex(c: &str) -> Result<()> {
     Ok(())
 }
 
-fn resolve(cfg: Config) -> Result<Resolved> {
-    let mut rng = rand::thread_rng();
+fn validate_dims(columns: u32, rows: u32, size: u32) -> Result<()> {
+    if !(4..=20).contains(&columns) {
+        bail!("columns must be between 4 and 20 (got {columns})");
+    }
+    if !(4..=20).contains(&rows) {
+        bail!("rows must be between 4 and 20 (got {rows})");
+    }
+    if !(20..=50).contains(&size) {
+        bail!("size must be between 20 and 50 (got {size})");
+    }
+    Ok(())
+}
 
-    let (colors, bg_from_palette) = match cfg.palette {
+fn resolve_palette_spec(
+    p: PaletteSpec,
+    rng: &mut impl Rng,
+) -> Result<(Vec<String>, Option<String>)> {
+    match p {
         PaletteSpec::Named(name) => {
-            let p = palettes::lookup(&name).ok_or_else(|| {
+            let pal = palettes::lookup(&name).ok_or_else(|| {
                 anyhow!(
                     "unknown palette {name:?}; available: {}",
                     palettes::names().join(", ")
                 )
             })?;
-            let colors: Vec<String> = p.colors.iter().map(|s| s.to_string()).collect();
-            let bg = p
-                .backgrounds
-                .choose(&mut rng)
-                .map(|s| s.to_string());
-            (colors, bg)
+            let colors: Vec<String> = pal.colors.iter().map(|s| s.to_string()).collect();
+            let bg = pal.backgrounds.choose(rng).map(|s| s.to_string());
+            Ok((colors, bg))
         }
-        PaletteSpec::Inline(v) => (v, None),
-    };
+        PaletteSpec::Inline(v) => {
+            if v.is_empty() || v.len() > 10 {
+                bail!("palette must contain between 1 and 10 colors (got {})", v.len());
+            }
+            for c in &v {
+                validate_hex(c)?;
+            }
+            Ok((v, None))
+        }
+    }
+}
 
-    if colors.is_empty() || colors.len() > 10 {
-        bail!("palette must contain between 1 and 10 colors (got {})", colors.len());
+/// Standalone mode: config must specify everything.
+fn resolve_standalone(cfg: Config) -> Result<Resolved> {
+    let mut rng = rand::thread_rng();
+    let palette = cfg
+        .palette
+        .ok_or_else(|| anyhow!("config requires 'palette' when no --theme is given"))?;
+    let columns = cfg
+        .columns
+        .ok_or_else(|| anyhow!("config requires 'columns' when no --theme is given"))?;
+    let rows = cfg
+        .rows
+        .ok_or_else(|| anyhow!("config requires 'rows' when no --theme is given"))?;
+    let size = cfg
+        .size
+        .ok_or_else(|| anyhow!("config requires 'size' when no --theme is given"))?;
+
+    let (colors, palette_bg) = resolve_palette_spec(palette, &mut rng)?;
+    if let Some(bg) = &cfg.background {
+        validate_hex(bg)?;
+    }
+    validate_dims(columns, rows, size)?;
+
+    Ok(Resolved {
+        colors,
+        background: cfg.background.or(palette_bg),
+        supersize: cfg.supersize.unwrap_or(false),
+        method: cfg.method.unwrap_or_default(),
+        columns,
+        rows,
+        size,
+    })
+}
+
+/// Theme mode: take base from theme; apply present-only overrides from config.
+fn apply_overrides(mut base: Resolved, cfg: Config) -> Result<Resolved> {
+    let mut rng = rand::thread_rng();
+    if let Some(palette) = cfg.palette {
+        let (colors, palette_bg) = resolve_palette_spec(palette, &mut rng)?;
+        base.colors = colors;
+        if let Some(bg) = palette_bg {
+            base.background = Some(bg);
+        }
+    }
+    if let Some(bg) = cfg.background {
+        validate_hex(&bg)?;
+        base.background = Some(bg);
+    }
+    if let Some(ss) = cfg.supersize {
+        base.supersize = ss;
+    }
+    if let Some(m) = cfg.method {
+        base.method = m;
+    }
+    if cfg.columns.is_some() || cfg.rows.is_some() || cfg.size.is_some() {
+        eprintln!("note: 'columns'/'rows'/'size' in config are ignored when --theme is used");
+    }
+    Ok(base)
+}
+
+fn read_theme(path: &Path) -> Result<Resolved> {
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("reading theme {}", path.display()))?;
+    let open = raw.find(META_OPEN).ok_or_else(|| {
+        anyhow!(
+            "{} has no bauhaus metadata; only SVGs produced by this tool can be used as themes",
+            path.display()
+        )
+    })?;
+    let body_start = open + META_OPEN.len();
+    let body_rel_end = raw[body_start..]
+        .find(META_CLOSE)
+        .ok_or_else(|| anyhow!("malformed metadata in {}: missing </desc>", path.display()))?;
+    let body = &raw[body_start..body_start + body_rel_end];
+
+    let mut columns: Option<u32> = None;
+    let mut rows: Option<u32> = None;
+    let mut size: Option<u32> = None;
+    let mut supersize = false;
+    let mut method = Method::default();
+    let mut colors: Vec<String> = Vec::new();
+    let mut background: Option<String> = None;
+
+    for line in body.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        let (k, v) = match line.split_once('=') {
+            Some(kv) => kv,
+            None => continue,
+        };
+        match k {
+            "columns" => columns = Some(v.parse().context("metadata: columns")?),
+            "rows" => rows = Some(v.parse().context("metadata: rows")?),
+            "size" => size = Some(v.parse().context("metadata: size")?),
+            "supersize" => supersize = v == "true",
+            "method" => method = Method::parse(v).context("metadata: method")?,
+            "palette" => {
+                colors = v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            }
+            "background" => {
+                background = if v.is_empty() || v == "none" { None } else { Some(v.to_string()) };
+            }
+            _ => {}
+        }
+    }
+
+    let columns = columns.ok_or_else(|| anyhow!("theme metadata missing 'columns'"))?;
+    let rows = rows.ok_or_else(|| anyhow!("theme metadata missing 'rows'"))?;
+    let size = size.ok_or_else(|| anyhow!("theme metadata missing 'size'"))?;
+    if colors.is_empty() {
+        bail!("theme metadata missing 'palette'");
     }
     for c in &colors {
         validate_hex(c)?;
     }
-    if let Some(bg) = &cfg.background {
+    if let Some(bg) = &background {
         validate_hex(bg)?;
     }
-    if !(4..=20).contains(&cfg.columns) {
-        bail!("columns must be between 4 and 20 (got {})", cfg.columns);
-    }
-    if !(4..=20).contains(&cfg.rows) {
-        bail!("rows must be between 4 and 20 (got {})", cfg.rows);
-    }
-    if !(20..=50).contains(&cfg.size) {
-        bail!("size must be between 20 and 50 (got {})", cfg.size);
-    }
+    validate_dims(columns, rows, size)?;
 
     Ok(Resolved {
         colors,
-        background: cfg.background.or(bg_from_palette),
-        supersize: cfg.supersize,
-        columns: cfg.columns,
-        rows: cfg.rows,
-        size: cfg.size,
+        background,
+        supersize,
+        method,
+        columns,
+        rows,
+        size,
     })
 }
 
@@ -188,17 +361,115 @@ fn normalize_color(c: &str) -> String {
     if c.starts_with('#') { c.to_string() } else { format!("#{c}") }
 }
 
-fn substitute_colors(template: &str, palette: &[String], rng: &mut impl Rng) -> String {
+/// Each method maps a cell (col, row) to a phase in [0, 1].
+fn cell_phase(method: Method, col: u32, row: u32, cols: u32, rows: u32) -> f64 {
+    use std::f64::consts::PI;
+    let nc = col as f64;
+    let nr = row as f64;
+    let cx = (cols as f64 - 1.0) / 2.0;
+    let cy = (rows as f64 - 1.0) / 2.0;
+    match method {
+        Method::Grid => 0.0, // unused; caller uses random
+        Method::Wave => {
+            let freq = 2.0 * PI * 1.5 / cols.max(1) as f64;
+            ((nc * freq + nr * 0.3).sin() + 1.0) * 0.5
+        }
+        Method::Spiral => {
+            let dx = nc - cx;
+            let dy = nr - cy;
+            let max_r = (cx.powi(2) + cy.powi(2)).sqrt().max(1.0);
+            let angle = dy.atan2(dx); // [-π, π]
+            let angle_norm = (angle + PI) / (2.0 * PI); // [0, 1]
+            let radius_norm = (dx * dx + dy * dy).sqrt() / max_r;
+            (angle_norm + radius_norm * 2.0).rem_euclid(1.0)
+        }
+        Method::Inflection => {
+            let x = (nc - cx) / cx.max(1.0); // [-1, 1]
+            0.5 + 0.5 * (x * 2.5).tanh()
+        }
+        Method::Deflection => {
+            let x = (nc - cx).abs() / cx.max(1.0);
+            x.clamp(0.0, 1.0)
+        }
+    }
+}
+
+/// Pick a colour from the palette weighted toward `palette[phase·N]`.
+/// For Method::Grid (and 1-colour palettes) this is just a uniform random pick.
+/// Other methods pick the dominant phase colour ~65% of the time and an
+/// immediate neighbour the rest, so each cell reads as belonging to a clear
+/// colour region.
+fn pick_color<'a>(
+    palette: &'a [String],
+    method: Method,
+    phase: f64,
+    rng: &mut impl Rng,
+) -> &'a str {
+    let n = palette.len();
+    if n == 1 || method == Method::Grid {
+        return palette.choose(rng).expect("palette non-empty").as_str();
+    }
+    let center = (phase * n as f64).floor() as i64;
+    let offset = if rng.gen_bool(0.65) {
+        0
+    } else if rng.gen_bool(0.5) {
+        -1
+    } else {
+        1
+    };
+    let idx = (center + offset).rem_euclid(n as i64) as usize;
+    palette[idx].as_str()
+}
+
+fn substitute_colors_phased(
+    template: &str,
+    palette: &[String],
+    method: Method,
+    phase: f64,
+    rng: &mut impl Rng,
+) -> String {
     let mut out = String::with_capacity(template.len());
     let mut rest = template;
     while let Some(idx) = rest.find(COLOR_TOKEN) {
         out.push_str(&rest[..idx]);
-        let color = palette.choose(rng).expect("palette validated non-empty");
+        let color = pick_color(palette, method, phase, rng);
         out.push_str(&normalize_color(color));
         rest = &rest[idx + COLOR_TOKEN.len()..];
     }
     out.push_str(rest);
     out
+}
+
+/// Rotation choice. Grid is fully random; other methods quantise to one of
+/// {0, 90, 180, 270} indexed by phase, so neighbouring cells in the same phase
+/// region orient together.
+fn pick_rotation(method: Method, phase: f64, rng: &mut impl Rng) -> u32 {
+    match method {
+        Method::Grid => *ROTATIONS.choose(rng).expect("rotations non-empty"),
+        _ => {
+            let idx = ((phase * 4.0).floor() as usize).min(3);
+            ROTATIONS[idx]
+        }
+    }
+}
+
+fn metadata_block(r: &Resolved) -> String {
+    let normalized: Vec<String> = r.colors.iter().map(|c| normalize_color(c)).collect();
+    let bg = r
+        .background
+        .as_deref()
+        .map(normalize_color)
+        .unwrap_or_else(|| "none".to_string());
+    format!(
+        "  <desc>bauhaus\ncolumns={cols}\nrows={rows}\nsize={size}\nsupersize={ss}\nmethod={method}\npalette={pal}\nbackground={bg}\n</desc>\n",
+        cols = r.columns,
+        rows = r.rows,
+        size = r.size,
+        ss = r.supersize,
+        method = r.method.as_str(),
+        pal = normalized.join(","),
+        bg = bg,
+    )
 }
 
 fn generate_svg(r: &Resolved, components: &[String]) -> String {
@@ -211,6 +482,8 @@ fn generate_svg(r: &Resolved, components: &[String]) -> String {
     let approx = (r.rows * r.columns) as usize * 256;
     let mut body = String::with_capacity(approx);
 
+    body.push_str(&metadata_block(r));
+
     if let Some(bg) = &r.background {
         body.push_str(&format!(
             "  <rect width=\"{total_w}\" height=\"{total_h}\" fill=\"{}\"/>\n",
@@ -221,10 +494,15 @@ fn generate_svg(r: &Resolved, components: &[String]) -> String {
     for row in 0..r.rows {
         for col in 0..r.columns {
             let component = components.choose(&mut rng).expect("components non-empty");
-            let resolved = substitute_colors(component, &r.colors, &mut rng);
+            let phase = if r.method == Method::Grid {
+                rng.gen_range(0.0..1.0)
+            } else {
+                cell_phase(r.method, col, row, r.columns, r.rows)
+            };
+            let resolved = substitute_colors_phased(component, &r.colors, r.method, phase, &mut rng);
             let cx = col as f64 * r.size as f64 + half;
             let cy = row as f64 * r.size as f64 + half;
-            let rot = *ROTATIONS.choose(&mut rng).unwrap();
+            let rot = pick_rotation(r.method, phase, &mut rng);
             body.push_str(&format!(
                 "  <g transform=\"translate({cx},{cy}) rotate({rot}) scale({scale}) translate(-50,-50)\">\n    {resolved}\n  </g>\n"
             ));
@@ -236,14 +514,21 @@ fn generate_svg(r: &Resolved, components: &[String]) -> String {
         for _ in 0..count {
             let factor = *SUPERSIZE_SCALES.choose(&mut rng).unwrap() as i32;
             let component = components.choose(&mut rng).expect("components non-empty");
-            let resolved = substitute_colors(component, &r.colors, &mut rng);
             let col = rng.gen_range(1 - factor..r.columns as i32);
             let row = rng.gen_range(1 - factor..r.rows as i32);
+            let anchor_col = col.clamp(0, r.columns as i32 - 1) as u32;
+            let anchor_row = row.clamp(0, r.rows as i32 - 1) as u32;
+            let phase = if r.method == Method::Grid {
+                rng.gen_range(0.0..1.0)
+            } else {
+                cell_phase(r.method, anchor_col, anchor_row, r.columns, r.rows)
+            };
+            let resolved = substitute_colors_phased(component, &r.colors, r.method, phase, &mut rng);
             let block = factor * r.size as i32;
             let cx = col as f64 * r.size as f64 + block as f64 / 2.0;
             let cy = row as f64 * r.size as f64 + block as f64 / 2.0;
             let big_scale = block as f64 / COMPONENT_UNIT as f64;
-            let rot = *ROTATIONS.choose(&mut rng).unwrap();
+            let rot = pick_rotation(r.method, phase, &mut rng);
             body.push_str(&format!(
                 "  <g transform=\"translate({cx},{cy}) rotate({rot}) scale({big_scale}) translate(-50,-50)\">\n    {resolved}\n  </g>\n"
             ));
@@ -258,6 +543,12 @@ fn generate_svg(r: &Resolved, components: &[String]) -> String {
 fn default_output_path() -> PathBuf {
     let stamp = Local::now().format("%Y%m%d_%H%M%S");
     PathBuf::from(format!("bauhaus_{stamp}.svg"))
+}
+
+fn load_config(path: &Path) -> Result<Config> {
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("reading config {}", path.display()))?;
+    serde_yml::from_str(&raw).context("parsing yaml config")
 }
 
 fn main() -> Result<()> {
@@ -280,11 +571,19 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let config_path = args.config.expect("clap enforces presence");
-    let raw = fs::read_to_string(&config_path)
-        .with_context(|| format!("reading config {}", config_path.display()))?;
-    let cfg: Config = serde_yml::from_str(&raw).context("parsing yaml config")?;
-    let resolved = resolve(cfg)?;
+    let resolved = match (args.theme.as_ref(), args.config.as_ref()) {
+        (Some(theme_path), Some(config_path)) => {
+            let base = read_theme(theme_path)?;
+            let cfg = load_config(config_path)?;
+            apply_overrides(base, cfg)?
+        }
+        (Some(theme_path), None) => read_theme(theme_path)?,
+        (None, Some(config_path)) => {
+            let cfg = load_config(config_path)?;
+            resolve_standalone(cfg)?
+        }
+        (None, None) => bail!("must provide --config or --theme (or --list-palettes)"),
+    };
 
     let components = load_components(&args.assets)?;
     eprintln!(

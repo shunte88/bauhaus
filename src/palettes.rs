@@ -78,6 +78,30 @@ pub const PALETTES: &[BuiltinPalette] = &[
         colors: &["#1E3A5F", "#A7C7E7", "#2E5D3B", "#8B95A1", "#D6E5F0", "#7A0019"],
         backgrounds: &["#F0F4F8", "#0F1419"],
     },
+    BuiltinPalette {
+        name: "Monochrome",
+        aliases: &["Grayscale"],
+        colors: &["#000000", "#333333", "#666666", "#999999", "#CCCCCC", "#FFFFFF"],
+        backgrounds: &["#F0F0F0", "#FFFFFF"],
+    },
+    BuiltinPalette {
+        name: "Vibrant",
+        aliases: &[],
+        colors: &["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4"],
+        backgrounds: &["#42d4f4", "#f032e6"],
+    },
+    BuiltinPalette {
+        name: "Compskey01",
+        aliases: &["barrette01"],
+        colors: &["#efefee", "#f7bd18", "#ee6c15", "#1f3a61", "#1a2b43", "#3ca1a1", "#fefefe"],
+        backgrounds: &["#efefee", "#000000", "#fefefe"],
+    },
+    BuiltinPalette {
+        name: "Compskey02",
+        aliases: &["barrette02"],
+        colors: &["#fefefe", "#40aaaa", "#181c17", "#214345", "#ee6c15", "#f1bb13", "#d8c8aa"],
+        backgrounds: &["#d8c8aa", "#000000", "#fefefe"],
+    },
 ];
 
 fn normalize_key(s: &str) -> String {
