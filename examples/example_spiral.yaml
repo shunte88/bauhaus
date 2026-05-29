@@ -1,0 +1,28 @@
+# A named built-in palette (see `bauhaus --list-palettes`).
+# Background is auto-picked from the palette's background pool.
+#palette: "Moholy-Nagy"
+palette: "Albers"
+
+# To use a custom palette instead, replace the line above with an inline array:
+# palette:
+#   - "#1A1A1A"
+#   - "#E63946"
+#   - "#F1FAEE"
+#   - "#A8DADC"
+#   - "#457B9D"
+#
+# Optional explicit background color (overrides the auto-pick):
+# background: "#000000"
+
+# When true, a few components are scaled 3×/4×/6× and dropped onto the grid
+# as accent pieces; they may roll off any edge.
+supersize: true
+
+# Placement algorithm: grid (default), wave, spiral, inflection, deflection.
+# Non-grid methods compute a phase from each cell's position that biases its
+# color and rotation, producing structured patterns instead of pure chaos.
+method: wave
+
+columns: 12
+rows: 8
+size: 50
