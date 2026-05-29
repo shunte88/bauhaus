@@ -1,6 +1,6 @@
 # Bauhaus Pattern Generator
 
-A small, fast Rust CLI that generates Bauhaus-style SVG patterns by tiling random shape components onto a grid with a user-supplied colour palette, theme, and style.
+A small, fast Rust CLI that generates Bauhaus-style SVG patterns by tiling random shape components onto a grid with a user-supplied color palette, theme, and style.
 
 ## Build
 
@@ -31,7 +31,7 @@ columns: 12              # 4..=20
 rows: 8                  # 4..=20
 size: 40                 # 30..=60 (cell side in px)
 
-method: spiral           # grid (default) | wave | spiral | inflection | deflection
+method: spiral           # grid (default) | wave | spiral | inflection | deflection | evolve | merge
 supersize: true          # accent glyphs scaled 3×/4×/6× (10..=24 of them)
 lines: true              # bold lines crossing the canvas (4..=12 of them)
 limit: 8                 # cap working glyphs to 8 randomly-selected ones
@@ -39,20 +39,36 @@ limit: 8                 # cap working glyphs to 8 randomly-selected ones
 
 All keys above `method` are required in standalone mode. Everything from `method` down is optional.
 
-## Feature behaviour
+## Feature behavior
 
-| Feature | What it does |
+### Placement methods
+
+| Method | What it does |
 | --- | --- |
-| `method: grid` | Random component, random rotation, random colour per cell. The chaotic baseline. |
-| `method: wave` | Phase = `sin(col·freq + row·0.3)`. Sinusoidal colour bands across the canvas. |
-| `method: spiral` | Phase = `(angle/2π + 2·r/max_r) mod 1`. Colour arms wound from the centre. |
-| `method: inflection` | Phase = `½ + ½·tanh((col−cx)/cx · 2.5)`. S-curve transition L↔R. |
-| `method: deflection` | Phase = `\|col−cx\|/cx`. V-shape symmetric about the centre column. |
+| `grid` | Random component, random rotation, random color per cell. The chaotic baseline. |
+| `wave` | Phase = `sin(col·freq + row·0.3)`. Sinusoidal color bands across the canvas. |
+| `spiral` | Phase = `(angle/2π + 2·r/max_r) mod 1`. Color arms wound from the center. |
+| `inflection` | Phase = `½ + ½·tanh((col−cx)/cx · 2.5)`. S-curve transition L↔R. |
+| `deflection` | Phase = `\|col−cx\|/cx`. V-shape symmetric about the center column. |
+
+For non-`grid` methods, color selection inside each cell is biased: ~65% the dominant `palette[phase·N]`, ~35% an immediate neighbor. Rotation is quantized to `{0°, 90°, 180°, 270°}` indexed by phase, so neighboring cells in the same phase region orient together.
+
+### Meta-methods (dual output)
+
+Both meta-methods require `--theme` to be meaningful. Without one, they silently fall back to `grid` placement and produce a single file (with an stderr note).
+
+| Method | With `--theme`, additionally emits |
+| --- | --- |
+| `evolve` | `<stem>_intermediate.<ext>` — each base cell is a 50/50 random pick between the theme's cell and the new svg's cell at that position. Supersize and line layers are pooled from both sources, with each block included at 50% probability (so density stays comparable to either parent). The result reads as a "halfway" mix. |
+| `merge` | `<stem>_merged.<ext>` — conceptually places the two svgs side-by-side (`[THEME][NEW]`) and shows the viewport-width window centered on the seam: theme's right half on the left, new's left half on the right. Supersize blocks and lines ride along with their parent shift, so it looks like you scrolled cleanly across the three images. |
+
+### Decorations & filters
+
+| Key | What it does |
+| --- | --- |
 | `supersize: true` | 10–24 extra components placed at scale 3×, 4×, or 6× as accent pieces. Can roll off any edge. |
 | `lines: true` | 4–12 bold lines (horizontal, vertical, or 45° in either direction). Length `[size, max-for-orientation]`, stroke-width `[2, size/2]`. Drawn on top of everything. |
 | `limit: N` | Randomly pick N glyphs from the loaded asset set and use only those for the whole pattern. `N ≥ 1`; clamped silently if `N` exceeds available glyphs. |
-
-For non-`grid` methods, colour selection inside each cell is biased: ~65% the dominant `palette[phase·N]`, ~35% an immediate neighbour. Rotation is quantised to `{0°, 90°, 180°, 270°}` indexed by phase, so neighbouring cells in the same phase region orient together.
 
 ## Theme mode
 
@@ -78,18 +94,19 @@ Monochrome (aka Grayscale)          Vibrant
 Comiskey01 (aka barrett01)          Comiskey02 (aka barrett02)
 ```
 
-Each named palette has a foreground colour set plus a background pool; the background is auto-picked when you reference a palette by name. Use `background: "#..."` to override, or use an inline `palette: [...]` array to skip the background entirely.
+Each named palette has a foreground color set plus a background pool; the background is auto-picked when you reference a palette by name. Use `background: "#..."` to override, or use an inline `palette: [...]` array to skip the background entirely.
 
-You can also specify your own palette with up to 10 supported colours.
+You can also specify your own palette with up to 10 supported colors.
 
 ## Assets
 
-Shapes are SVG files in the `--assets` directory (default `assets/`). Each file uses a `viewBox="0 0 100 100"` base coordinate space and marks paintable fills with the literal placeholder `{{C}}` : every occurrence is independently replaced with a chosen palette colour at generation time. Drop a new SVG in the folder and it's picked up on the next run.
+Shapes are SVG files in the `--assets` directory (default `assets/`). Each file uses a `viewBox="0 0 100 100"` base coordinate space and marks paintable fills with the literal placeholder `{{C}}` : every occurrence is independently replaced with a chosen palette color at generation time. Drop a new SVG in the folder and it's picked up on the next run.
 
 Bundled sets:
 
 - `assets/` : the default 31 primitives (squares, circles, triangles, diamonds, arches, half/quarter circles, hourglass, triangle-grid, lines, cross, pill, ring, spiral, diagonal stripes, dot rows, splits, quadrants, dots, semis, etc.).
 - `asset_set_01/` : 42 folk-style ornaments (quatrefoils, snowflakes, stars, flowers, scrollwork, hearts, sunbursts).
 - `asset_set_02/` : 18 large composite tiles (tulips, lotus, bullseye, half-disks, leaf stems, dot rows, etc.).
+- `asset_set_04/` : 110 glyphs — 100 full-bleed universal shapes (circles, hexagons, squares, triangles, misc) plus 10 Bauhaus-style numerals (0–9).
 
 Shapes and palettes are derived from exemplar patterns provided by Barrett/Peter for their e-Ink project, multiple reference sourced from pinterest, as well as hand-drawn additions.

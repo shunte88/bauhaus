@@ -1,0 +1,34 @@
+# A named built-in palette (see `bauhaus --list-palettes`).
+# Background is auto-picked from the palette's background pool.
+palette: "barrett02"
+
+# To use a custom palette instead, replace the line above with an inline array:
+#palette:
+#  - "#d58aa1"
+#  - "#761042"
+#  - "#feb2b6"
+#  - "#ad1544"
+#  - "#f7414e"
+#  - "#ffddde"
+
+# Optional explicit background color (overrides the auto-pick):
+background: "#ffddde"
+
+# When true, a few components are scaled 3×/4×/6× and dropped onto the grid
+# as accent pieces; they may roll off any edge.
+supersize: false
+
+# Placement algorithm: grid (default), wave, spiral, inflection, deflection.
+# Non-grid methods compute a phase from each cell's position that biases its
+# color and rotation, producing structured patterns instead of pure chaos.
+method: evolve
+assets: ./asset_set_06
+
+# When true, lines of random line weight are drawn vertically, horizontally
+# and at 45 degrees
+lines: false
+#limit: 1
+
+columns: 12
+rows: 8
+size: 60

@@ -13,7 +13,7 @@ use serde::Deserialize;
 const COLOR_TOKEN: &str = "{{C}}";
 const COMPONENT_UNIT: u32 = 100;
 const ROTATIONS: [u32; 4] = [0, 90, 180, 270];
-const SUPERSIZE_SCALES: [u32; 3] = [3, 4, 6];
+const SUPERSIZE_SCALES: [u32; 5] = [3, 4, 5, 6, 7];
 const SUPERSIZE_COUNT_RANGE: std::ops::RangeInclusive<u32> = 10..=24;
 const LINES_COUNT_RANGE: std::ops::RangeInclusive<u32> = 4..=12;
 const META_OPEN: &str = "<desc>bauhaus";
@@ -28,6 +28,8 @@ enum Method {
     Spiral,
     Inflection,
     Deflection,
+    Evolve,
+    Merge,
 }
 
 impl Method {
@@ -38,6 +40,8 @@ impl Method {
             Method::Spiral => "spiral",
             Method::Inflection => "inflection",
             Method::Deflection => "deflection",
+            Method::Evolve => "evolve",
+            Method::Merge => "merge",
         }
     }
 
@@ -48,8 +52,10 @@ impl Method {
             "spiral" => Ok(Method::Spiral),
             "inflection" => Ok(Method::Inflection),
             "deflection" => Ok(Method::Deflection),
+            "evolve" => Ok(Method::Evolve),
+            "merge" => Ok(Method::Merge),
             other => bail!(
-                "unknown method {other:?}; expected one of: grid, wave, spiral, inflection, deflection"
+                "unknown method {other:?}; expected one of: grid, wave, spiral, inflection, deflection, evolve, merge"
             ),
         }
     }
@@ -151,6 +157,7 @@ struct Resolved {
     size: u32,
 }
 
+// we should support alpha too
 fn validate_hex(c: &str) -> Result<()> {
     let s = c.trim_start_matches('#');
     if s.len() != 6 || !s.chars().all(|ch| ch.is_ascii_hexdigit()) {
@@ -401,7 +408,7 @@ fn normalize_color(c: &str) -> String {
 fn cell_phase(method: Method, col: u32, row: u32, cols: u32, rows: u32) -> f64 {
     use std::f64::consts::PI;
     let nc = col as f64;
-    let nr = row as f64;
+    let nr: f64 = row as f64;
     let cx = (cols as f64 - 1.0) / 2.0;
     let cy = (rows as f64 - 1.0) / 2.0;
     match method {
@@ -424,6 +431,14 @@ fn cell_phase(method: Method, col: u32, row: u32, cols: u32, rows: u32) -> f64 {
             0.5 + 0.5 * (x * 2.5).tanh()
         }
         Method::Deflection => {
+            let x = (nc - cx).abs() / cx.max(1.0);
+            x.clamp(0.0, 1.0)
+        }
+        Method::Evolve => {
+            let x = (nc - cx).abs() / cx.max(1.0);
+            x.clamp(0.0, 1.0)
+        }
+        Method::Merge => {
             let x = (nc - cx).abs() / cx.max(1.0);
             x.clamp(0.0, 1.0)
         }
@@ -628,6 +643,214 @@ fn default_output_path() -> PathBuf {
     PathBuf::from(format!("bauhaus_{stamp}.svg"))
 }
 
+/// All `<g transform=...>…</g>` blocks from an SVG, in document order. Balances
+/// nested `<g>` so components with internal grouping (e.g. `16_six_arm_snowflake`)
+/// parse correctly. The first `cols*rows` are base cells; any remainder are
+/// supersize blocks.
+fn extract_g_transforms(svg: &str) -> Result<Vec<String>> {
+    let mut blocks = Vec::new();
+    let mut scan = 0;
+    while let Some(rel) = svg[scan..].find("<g transform=") {
+        let start = scan + rel;
+        let mut depth: i32 = 1;
+        let mut pos = start + 2; // past the opening "<g"
+        while depth > 0 && pos < svg.len() {
+            if svg[pos..].starts_with("<g ") || svg[pos..].starts_with("<g>") {
+                depth += 1;
+                pos += 2;
+            } else if svg[pos..].starts_with("</g>") {
+                depth -= 1;
+                pos += 4;
+            } else {
+                pos += 1;
+            }
+        }
+        if depth != 0 {
+            bail!("unmatched <g> in svg at byte {start}");
+        }
+        blocks.push(svg[start..pos].to_string());
+        scan = pos;
+    }
+    Ok(blocks)
+}
+
+/// All self-closing `<line .../>` elements from an SVG, in document order.
+fn extract_line_elements(svg: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut scan = 0;
+    while let Some(rel) = svg[scan..].find("<line ") {
+        let start = scan + rel;
+        let end = match svg[start..].find("/>") {
+            Some(idx) => start + idx + 2,
+            None => break,
+        };
+        lines.push(svg[start..end].to_string());
+        scan = end;
+    }
+    lines
+}
+
+/// Build the intermediate SVG. Each base cell is a 50/50 random pick between
+/// the theme's cell and the new svg's cell at that position. Supersize blocks
+/// and line elements are pooled from both sources, with each one included in
+/// the output with 50% probability (so density stays roughly comparable to
+/// either parent rather than doubling up).
+fn generate_intermediate(theme_svg: &str, new_svg: &str, r: &Resolved) -> Result<String> {
+    let expected = (r.columns * r.rows) as usize;
+
+    let theme_g = extract_g_transforms(theme_svg).context("parsing theme svg")?;
+    let new_g = extract_g_transforms(new_svg).context("parsing new svg")?;
+    if theme_g.len() < expected {
+        bail!(
+            "theme has {} cell <g> blocks, expected at least {expected}",
+            theme_g.len()
+        );
+    }
+    if new_g.len() < expected {
+        bail!(
+            "new svg has {} cell <g> blocks, expected at least {expected}",
+            new_g.len()
+        );
+    }
+    let (theme_base, theme_super) = theme_g.split_at(expected);
+    let (new_base, new_super) = new_g.split_at(expected);
+
+    let theme_lines = extract_line_elements(theme_svg);
+    let new_lines = extract_line_elements(new_svg);
+
+    let total_w = r.columns * r.size;
+    let total_h = r.rows * r.size;
+
+    let mut body = String::new();
+    body.push_str(&metadata_block(r));
+    if let Some(bg) = &r.background {
+        body.push_str(&format!(
+            "  <rect width=\"{total_w}\" height=\"{total_h}\" fill=\"{}\"/>\n",
+            normalize_color(bg)
+        ));
+    }
+
+    let mut rng = rand::thread_rng();
+
+    // Base cells: 50/50 per position.
+    for i in 0..expected {
+        let pick = if rng.gen_bool(0.5) { &theme_base[i] } else { &new_base[i] };
+        body.push_str("  ");
+        body.push_str(pick);
+        body.push('\n');
+    }
+
+    // Supersize: pool both sources, include each block with 50% probability.
+    for block in theme_super.iter().chain(new_super.iter()) {
+        if rng.gen_bool(0.5) {
+            body.push_str("  ");
+            body.push_str(block);
+            body.push('\n');
+        }
+    }
+
+    // Lines: same approach as supersize.
+    for line in theme_lines.iter().chain(new_lines.iter()) {
+        if rng.gen_bool(0.5) {
+            body.push_str("  ");
+            body.push_str(line);
+            body.push('\n');
+        }
+    }
+
+    Ok(format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {total_w} {total_h}\" width=\"{total_w}\" height=\"{total_h}\" style=\"overflow:hidden\">\n{body}</svg>\n"
+    ))
+}
+
+/// Insert `_<suffix>` before the extension. `out.svg` + "intermediate" → `out_intermediate.svg`.
+fn derived_path(p: &Path, suffix: &str) -> PathBuf {
+    let parent = p.parent().unwrap_or_else(|| Path::new("."));
+    let stem = p
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    match p.extension() {
+        Some(ext) => parent.join(format!("{stem}_{suffix}.{}", ext.to_string_lossy())),
+        None => parent.join(format!("{stem}_{suffix}")),
+    }
+}
+
+/// Build the merged SVG. Conceptually theme and new are placed side-by-side
+/// horizontally (`[THEME][NEW]`) and merged is a viewport-width window centred
+/// on the seam — theme's right half on the left, new's left half on the right.
+/// Implemented by wrapping theme content in a left-shift group (`translate(-W/2, 0)`)
+/// and new content in a right-shift group (`translate(+W/2, 0)`). Off-canvas
+/// portions are clipped by the root `overflow:hidden`. Supersize blocks and
+/// lines ride along with their parent shift, so they're positioned as if you
+/// scrolled across the three images seamlessly.
+fn generate_merged(theme_svg: &str, new_svg: &str, r: &Resolved) -> Result<String> {
+    let total_w = r.columns * r.size;
+    let total_h = r.rows * r.size;
+    let half_w = total_w as f64 / 2.0;
+    let expected = (r.columns * r.rows) as usize;
+
+    let theme_g = extract_g_transforms(theme_svg).context("parsing theme svg")?;
+    let new_g = extract_g_transforms(new_svg).context("parsing new svg")?;
+    if theme_g.len() < expected {
+        bail!(
+            "theme has {} cell <g> blocks, expected at least {expected}",
+            theme_g.len()
+        );
+    }
+    if new_g.len() < expected {
+        bail!(
+            "new svg has {} cell <g> blocks, expected at least {expected}",
+            new_g.len()
+        );
+    }
+
+    let theme_lines = extract_line_elements(theme_svg);
+    let new_lines = extract_line_elements(new_svg);
+
+    let mut body = String::new();
+    body.push_str(&metadata_block(r));
+
+    if let Some(bg) = &r.background {
+        body.push_str(&format!(
+            "  <rect width=\"{total_w}\" height=\"{total_h}\" fill=\"{}\"/>\n",
+            normalize_color(bg)
+        ));
+    }
+
+    // Theme layer — shifted left by W/2. Theme's right half lands in merged.
+    body.push_str(&format!("  <g transform=\"translate({},0)\">\n", -half_w));
+    for block in &theme_g {
+        body.push_str("    ");
+        body.push_str(block);
+        body.push('\n');
+    }
+    for line in &theme_lines {
+        body.push_str("    ");
+        body.push_str(line);
+        body.push('\n');
+    }
+    body.push_str("  </g>\n");
+
+    // New layer — shifted right by W/2. New's left half lands in merged.
+    body.push_str(&format!("  <g transform=\"translate({},0)\">\n", half_w));
+    for block in &new_g {
+        body.push_str("    ");
+        body.push_str(block);
+        body.push('\n');
+    }
+    for line in &new_lines {
+        body.push_str("    ");
+        body.push_str(line);
+        body.push('\n');
+    }
+    body.push_str("  </g>\n");
+
+    Ok(format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {total_w} {total_h}\" width=\"{total_w}\" height=\"{total_h}\" style=\"overflow:hidden\">\n{body}</svg>\n"
+    ))
+}
+
 fn load_config(path: &Path) -> Result<Config> {
     let raw = fs::read_to_string(path)
         .with_context(|| format!("reading config {}", path.display()))?;
@@ -654,7 +877,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let resolved = match (args.theme.as_ref(), args.config.as_ref()) {
+    let mut resolved = match (args.theme.as_ref(), args.config.as_ref()) {
         (Some(theme_path), Some(config_path)) => {
             let base = read_theme(theme_path)?;
             let cfg = load_config(config_path)?;
@@ -667,6 +890,21 @@ fn main() -> Result<()> {
         }
         (None, None) => bail!("must provide --config or --theme (or --list-palettes)"),
     };
+
+    // Evolve and Merge are meta-methods: they need a --theme to be meaningful.
+    // Without one, fall back to grid for placement. With one, generate normally
+    // with grid placement and emit an additional derived svg further down.
+    let evolve_with_theme = resolved.method == Method::Evolve && args.theme.is_some();
+    let merge_with_theme = resolved.method == Method::Merge && args.theme.is_some();
+    if matches!(resolved.method, Method::Evolve | Method::Merge) {
+        if args.theme.is_none() {
+            let name = resolved.method.as_str();
+            eprintln!(
+                "note: '{name}' method without --theme falls back to 'grid' (nothing to {name} from)"
+            );
+        }
+        resolved.method = Method::Grid;
+    }
 
     let mut components = load_components(&args.assets)?;
     let loaded = components.len();
@@ -689,9 +927,30 @@ fn main() -> Result<()> {
 
     let svg = generate_svg(&resolved, &components);
 
-    let out_path = args.output.unwrap_or_else(default_output_path);
+    let out_path = args.output.clone().unwrap_or_else(default_output_path);
     fs::write(&out_path, &svg)
         .with_context(|| format!("writing {}", out_path.display()))?;
     println!("{}", out_path.display());
+
+    if evolve_with_theme || merge_with_theme {
+        let theme_path = args.theme.as_ref().expect("guarded above");
+        let theme_svg = fs::read_to_string(theme_path)
+            .with_context(|| format!("reading theme {}", theme_path.display()))?;
+        if evolve_with_theme {
+            let intermediate = generate_intermediate(&theme_svg, &svg, &resolved)?;
+            let int_path = derived_path(&out_path, "intermediate");
+            fs::write(&int_path, &intermediate)
+                .with_context(|| format!("writing {}", int_path.display()))?;
+            println!("{}", int_path.display());
+        }
+        if merge_with_theme {
+            let merged = generate_merged(&theme_svg, &svg, &resolved)?;
+            let merged_path = derived_path(&out_path, "merged");
+            fs::write(&merged_path, &merged)
+                .with_context(|| format!("writing {}", merged_path.display()))?;
+            println!("{}", merged_path.display());
+        }
+    }
+
     Ok(())
 }
